@@ -92,11 +92,18 @@ class MainFrame(wx.Frame):
 		self.make_tabs()
 		self.main_sizer.Add(self.tabs, 0, wx.ALL, 5)
 		self.panel.SetSizerAndFit(self.main_sizer)
+		self.bind_events()
 		self.Layout()
 
 	def make_tabs(self):
 		self.find_my = FindMy(self.tabs)
 		self.tabs.AddPage(self.find_my, "Find my", True)
+
+	def bind_events(self):
+		self.Bind(wx.EVT_CLOSE, self.on_close)
+
+	def on_close(self, event):
+		app.exit()
 
 class FindMy(wx.Panel):
 	def __init__(self, parent, *args, **kwargs):
@@ -206,6 +213,10 @@ class LostDeviceDialog(wx.Dialog):
 		self.passcode = wx.TextCtrl(self)
 		pc_sizer.Add(label, 0, wx.ALL, 5)
 		pc_sizer.Add(self.passcode, 0, wx.ALL, 5)
+		label = wx.StaticText(self, label="Repeat new passcode")
+		self.pc_repeat = wx.TextCtrl(self)
+		pc_sizer.Add(label, 0, wx.ALL, 5)
+		pc_sizer.Add(self.pc_repeat, 0, wx.ALL, 5)
 		self.main_sizer.Add(msg_sizer)
 		self.main_sizer.Add(number_sizer)
 		self.main_sizer.Add(pc_sizer)
@@ -228,8 +239,13 @@ class LostDeviceDialog(wx.Dialog):
 		message = self.message.GetValue()
 		number = self.number.GetValue()
 		passcode = self.passcode.GetValue()
+		repeat = self.pc_repeat.GetValue()
 		if not message:
 			dialogs.error(self, "Error", "A message is required")
 			self.message.SetFocus()
+			return
+		if passcode and passcode != repeat:
+			dialogs.error(self, "Error", "The provided passwords must be the same")
+			self.passcode.SetFocus()
 			return
 		self.Close()
