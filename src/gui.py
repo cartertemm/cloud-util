@@ -99,13 +99,13 @@ class MainFrame(wx.Frame):
 		self.tabs.AddPage(self.find_my, "Find my", True)
 
 class FindMy(wx.Panel):
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
+	def __init__(self, parent, *args, **kwargs):
+		super().__init__(parent, *args, **kwargs)
 		self.ps_time = 0
 		self.update_time = 0
+		self.lm_time = 0
 		self.init_ui()
 		self.bind_events()
-		self.Layout()
 		self.populate_devices()
 
 	def init_ui(self):
@@ -129,10 +129,12 @@ class FindMy(wx.Panel):
 		self.main_sizer.Add(device_sizer)
 		self.main_sizer.Add(actions_sizer)
 		self.SetSizer(self.main_sizer)
+		self.Layout()
 
 	def bind_events(self):
 		self.Bind(wx.EVT_BUTTON, self.on_play_sound, self.play_sound)
 		self.Bind(wx.EVT_BUTTON, self.populate_devices, self.update)
+		self.Bind(wx.EVT_BUTTON, self.on_lost_mode, self.lost_mode)
 
 	def populate_devices(self, event=None):
 		self._populate_devices()
@@ -164,4 +166,70 @@ class FindMy(wx.Panel):
 		if idx == wx.NOT_FOUND:
 			return
 		icloud.service.devices[idx].play_sound()
-		dialogs.information(self, "Playing", "A sound is being played on devices[idx].name. Listen up!")
+		dialogs.information(self, "Playing", "A sound is being played on "+icloud.service.devices[idx]["name"]+". Listen up!")
+
+	def on_lost_mode(self, event):
+		if time.time() - self.lm_time < 1:
+			return
+		self.lm_time = time.time()
+		idx = self.device_list.GetSelection()
+		if idx == wx.NOT_FOUND:
+			return
+		dlg = LostDeviceDialog(self)
+		res = dlg.ShowModal()
+		if res != wx.ID_OK:
+			return
+		message = dlg.message.GetValue()
+		number = dlg.number.GetValue()
+		passcode = dlg.passcode.GetValue()
+		icloud.service.devices[idx].lost_device(number, message, passcode)
+
+class LostDeviceDialog(wx.Dialog):
+	def __init__(self, parent, title="Lost device"):
+		super().__init__(parent, title=title)
+		self.init_ui()
+
+	def init_ui(self):
+		self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+		msg_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		label = wx.StaticText(self, label="Message: ")
+		self.message = wx.TextCtrl(self, style=wx.TE_MULTILINE)
+		msg_sizer.Add(label, 0, wx.ALL, 5)
+		msg_sizer.Add(self.message, 0, wx.ALL, 5)
+		number_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		label = wx.StaticText(self, label="Owner phone number (leave blank for none): ")
+		self.number = wx.TextCtrl(self)
+		number_sizer.Add(label, 0, wx.ALL, 5)
+		number_sizer.Add(self.number, 0, wx.ALL, 5)
+		pc_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		label = wx.StaticText(self, label="New Passcode (leave blank for none): ")
+		self.passcode = wx.TextCtrl(self)
+		pc_sizer.Add(label, 0, wx.ALL, 5)
+		pc_sizer.Add(self.passcode, 0, wx.ALL, 5)
+		self.main_sizer.Add(msg_sizer)
+		self.main_sizer.Add(number_sizer)
+		self.main_sizer.Add(pc_sizer)
+		btn_sizer = wx.StdDialogButtonSizer()
+		cancel_btn = wx.Button(parent=self, id=wx.ID_CANCEL)
+		self.SetEscapeId(cancel_btn.GetId())
+		self.ok_btn = wx.Button(parent=self, id=wx.ID_OK)
+		btn_sizer.AddButton(cancel_btn)
+		btn_sizer.AddButton(self.ok_btn)
+		self.main_sizer.Add(btn_sizer)
+		btn_sizer.Realize()
+		self.main_sizer.Add(btn_sizer)
+		self.SetSizerAndFit(self.main_sizer)
+		self.Layout()
+
+	def bind_events(self):
+		self.Bind(wx.EVT_BUTTON, self.on_ok, self.ok_btn)
+
+	def on_ok(self):
+		message = self.message.GetValue()
+		number = self.number.GetValue()
+		passcode = self.passcode.GetValue()
+		if not message:
+			dialogs.error(self, "Error", "A message is required")
+			self.message.SetFocus()
+			return
+		self.Close()
