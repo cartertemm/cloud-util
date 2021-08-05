@@ -113,7 +113,7 @@ class FindMy(wx.Panel):
 		self.lm_time = 0
 		self.init_ui()
 		self.bind_events()
-		self.populate_devices()
+		self._populate_devices()
 
 	def init_ui(self):
 		self.main_sizer= wx.BoxSizer(wx.VERTICAL)
@@ -127,8 +127,6 @@ class FindMy(wx.Panel):
 		actions_sizer.Add(self.info, 0, wx.ALL, 5)
 		self.play_sound = wx.Button(self, label="&Play sound")
 		actions_sizer.Add(self.play_sound, 0, wx.ALL, 5)
-		self.display_message = wx.Button(self, label="&Display message")
-		actions_sizer.Add(self.display_message, 0, wx.ALL, 5)
 		self.lost_mode = wx.Button(self, label="&Lost mode")
 		actions_sizer.Add(self.lost_mode, 0, wx.ALL, 5)
 		self.update = wx.Button(self, label="&Refresh")
@@ -140,13 +138,13 @@ class FindMy(wx.Panel):
 
 	def bind_events(self):
 		self.Bind(wx.EVT_BUTTON, self.on_play_sound, self.play_sound)
-		self.Bind(wx.EVT_BUTTON, self.populate_devices, self.update)
+		self.Bind(wx.EVT_BUTTON, self.on_refresh, self.update)
 		self.Bind(wx.EVT_BUTTON, self.on_lost_mode, self.lost_mode)
 
-	def populate_devices(self, event=None):
-		self._populate_devices()
+	def on_refresh(self, event):
+		self._populate_devices(True)
 
-	def _populate_devices(self):
+	def _populate_devices(self, focus_list=False):
 		@run_threaded
 		def _inner():
 			devices = icloud.service.devices
@@ -154,15 +152,21 @@ class FindMy(wx.Panel):
 			for device in devices:
 				item = ", ".join((device["name"], device["deviceDisplayName"], str(round(device["batteryLevel"]*100, 3))+"%", device["batteryStatus"]))
 				items.append(item)
-			wx.CallAfter(self.device_list.Set, items)
+			wx.CallAfter(_set_items, items)
+		def _set_items(items):
+			self.device_list.Freeze()
+			self.device_list.Clear()
+			self.device_list.Set(items)
+			self.device_list.Thaw()
+			if self.device_list.GetCount() > 0:
+				self.device_list.SetSelection(0)
+			if focus_list:
+				self.device_list.SetFocus()
 		# to prevent unnecessary API spam, only allow updating every three seconds
 		if time.time() - self.update_time < 3:
 			return
 		self.update_time = time.time()
-		self.device_list.Freeze()
-		self.device_list.Clear()
 		_inner()
-		self.device_list.Thaw()
 
 	def on_play_sound(self, event):
 		# to prevent unnecessary API spam, only allow one sound to play per second
@@ -190,6 +194,7 @@ class FindMy(wx.Panel):
 		number = dlg.number.GetValue()
 		passcode = dlg.passcode.GetValue()
 		icloud.service.devices[idx].lost_device(number, message, passcode)
+		dialogs.information(self, "Success", "Lost mode enabled on "+icloud.service.devices[idx]["name"])
 
 class LostDeviceDialog(wx.Dialog):
 	def __init__(self, parent, title="Lost device"):
