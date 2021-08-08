@@ -7,3 +7,10 @@ def run_threaded(func):
 		t.start()
 		return t
 	return wrapper
+
+# convenience functions for GUI text display
+def friendly_bool(value, true="yes", false="no"):
+	return (true if value else false)
+
+def enabled(value):
+	return friendly_bool(value, "enabled", "disabled")

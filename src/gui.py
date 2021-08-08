@@ -1,12 +1,13 @@
 import time
 import wx
+import tformat
 from pyicloud import *
 from pyicloud import exceptions as pyi_exceptions
 import app
 import config
 import dialogs
 import icloud
-from utils import run_threaded
+import utils
 
 
 class LoginDialog(wx.Dialog):
@@ -138,6 +139,7 @@ class FindMy(wx.Panel):
 
 	def bind_events(self):
 		self.Bind(wx.EVT_BUTTON, self.on_play_sound, self.play_sound)
+		self.Bind(wx.EVT_BUTTON, self.on_info, self.info)
 		self.Bind(wx.EVT_BUTTON, self.on_refresh, self.update)
 		self.Bind(wx.EVT_BUTTON, self.on_lost_mode, self.lost_mode)
 
@@ -145,13 +147,17 @@ class FindMy(wx.Panel):
 		self._populate_devices(True)
 
 	def _populate_devices(self, focus_list=False):
-		@run_threaded
+		@utils.run_threaded
 		def _inner():
-			devices = icloud.service.devices
 			items = []
-			for device in devices:
-				item = ", ".join((device["name"], device["deviceDisplayName"], str(round(device["batteryLevel"]*100, 3))+"%", device["batteryStatus"]))
-				items.append(item)
+			try:
+				devices = icloud.service.devices
+			except PyiCloudNoDevicesException:
+				pass  # nothing to do
+			else:
+				for device in devices:
+					item = self._format_device(device)
+					items.append(item)
 			wx.CallAfter(_set_items, items)
 		def _set_items(items):
 			self.device_list.Freeze()
@@ -167,6 +173,21 @@ class FindMy(wx.Panel):
 			return
 		self.update_time = time.time()
 		_inner()
+
+	def _format_device(self, info):
+		statuses = {
+			"200": "Online",
+			"201": "Offline",
+			"203": "Pending",
+			"204": "Unregistered",
+		}
+		info = info.status(["batteryStatus"])
+		return ", ".join((
+			info["name"],
+			info["deviceDisplayName"],
+			str(round(info["batteryLevel"]*100, 3))+"%",
+			info["batteryStatus"],
+		))
 
 	def on_play_sound(self, event):
 		# to prevent unnecessary API spam, only allow one sound to play per second
@@ -196,6 +217,13 @@ class FindMy(wx.Panel):
 		icloud.service.devices[idx].lost_device(number, message, passcode)
 		dialogs.information(self, "Success", "Lost mode enabled on "+icloud.service.devices[idx]["name"])
 
+	def on_info(self, event):
+		idx = self.device_list.GetSelection()
+		if idx == wx.NOT_FOUND:
+			return
+		dlg = DeviceInfoDialog(self, icloud.service.devices[idx])
+		dlg.ShowModal()
+
 class LostDeviceDialog(wx.Dialog):
 	def __init__(self, parent, title="Lost device"):
 		super().__init__(parent, title=title)
@@ -205,7 +233,7 @@ class LostDeviceDialog(wx.Dialog):
 		self.main_sizer = wx.BoxSizer(wx.VERTICAL)
 		msg_sizer = wx.BoxSizer(wx.HORIZONTAL)
 		label = wx.StaticText(self, label="Message: ")
-		self.message = wx.TextCtrl(self, style=wx.TE_MULTILINE)
+		self.message = wx.TextCtrl(self)
 		msg_sizer.Add(label, 0, wx.ALL, 5)
 		msg_sizer.Add(self.message, 0, wx.ALL, 5)
 		number_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -250,7 +278,108 @@ class LostDeviceDialog(wx.Dialog):
 			self.message.SetFocus()
 			return
 		if passcode and passcode != repeat:
-			dialogs.error(self, "Error", "The provided passwords must be the same")
+			dialogs.error(self, "Error", "Pass codes must match")
 			self.passcode.SetFocus()
 			return
 		self.Close()
+
+class ChoiceDialog(wx.Dialog):
+	"""Generic WX dialog with a list of items and set of buttons.
+	Override the init_ui function in child classes to add additional UI controls.
+	"""
+
+	def __init__(self, parent, info, title="Info", flags=wx.CLOSE):
+		self.info = info
+		super().__init__(parent, title=title)
+		self.init_ui()
+		btn_sizer = self.CreateButtonSizer(flags)
+		self.sizer.Add(btn_sizer)
+		self.panel.SetSizerAndFit(self.sizer)
+		self.Layout()
+
+	def format_items(self):
+		pass
+
+	def init_ui(self):
+		self.panel = wx.Panel(self)
+		self.sizer = wx.BoxSizer(wx.VERTICAL)
+		lst_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		label = wx.StaticText(self.panel, label="Info")
+		items = [str(k)+": "+str(v) for (k, v) in self.format_items().items()]
+		self.list = wx.ListBox(self.panel, choices=items)
+		lst_sizer.Add(label, 0, wx.ALL, 5)
+		lst_sizer.Add(self.list, 0, wx.ALL, 5)
+		self.sizer.Add(lst_sizer, 0, wx.ALL, 5)
+
+class DeviceInfoDialog(ChoiceDialog):
+	def __init__(self, parent, info):
+		title = info["name"]+" info"
+		super().__init__(parent, info, title)
+		self.bind_events()
+
+	def init_ui(self):
+		super().init_ui()
+		actions_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		self.update = wx.Button(self, label="&Update")
+		actions_sizer.Add(self.update, 0, wx.ALL, 5)
+		self.sizer.Add(actions_sizer, 0, wx.ALL, 5)
+
+	def bind_events(self):
+		self.Bind(wx.EVT_BUTTON, self.on_update, self.update)
+
+	def update_items(self, focus=False):
+		self.info.manager.refresh_client()
+		items = [str(k)+": "+str(v) for (k, v) in self.format_items().items()]
+		self.list.Freeze()
+		self.list.Set(items)
+		self.list.Thaw()
+		if focus:
+			self.list.SetFocus()
+
+	def on_update(self, event):
+		@utils.run_threaded
+		def inner():
+			wx.CallAfter(self.update_items, True)
+		inner()
+
+	def format_items(self):
+		"""Formats device attributes into a readable list."""
+		info = {}
+		info["Name"] = self.info["name"]
+		info["Status"] = self.info.get("deviceStatus", "unknown")
+		model = self.info.get("deviceModel", "unknown")
+		if model != "unknown":
+			model += " (" + self.info.get("rawDeviceModel", "unknown") + ")"
+		info["Model"] = model
+		info["Display name"] = self.info.get("deviceDisplayName", "unknown")
+		info["Battery status"] = self.info.get("batteryStatus", "unknown")
+		info["Battery level"] = str(round(self.info.get("batteryLevel", 0)*100, 3)) + "%"
+		# verify meaning of this
+		info["UUID"] = self.info.get("baUUID", "unknown")
+		info["Discovery ID"] = self.info.get("deviceDiscoveryId", "unknown")
+		info["Low power mode"] = utils.enabled(self.info.get("lowPowerMode"))
+		info["Activation lock"] = utils.enabled(self.info.get("activationLocked"))
+		info["Passcode length"] = str(self.info.get("passcodeLength", "unknown"))
+		info["Family share"] = utils.enabled(self.info.get("fmlyShare"))
+		info["Lost mode"] = utils.enabled(self.info.get("lostModeEnabled"))
+		info["Lost mode capable"] = utils.friendly_bool(self.info.get("lostModeCapable"))
+		info["Whipe in progress"] = utils.friendly_bool(self.info.get("wipeInProgress"))
+		#: WARNING! I don't actually know whether this means what I think it does
+		info["Wipe after lock/failed pass code attempts"] = utils.enabled(self.info.get("canWipeAfterLock"))
+		info["Location services"] = utils.enabled(self.info.get("locationEnabled"))
+		info["Location capable"] = utils.friendly_bool(self.info.get("locationCapable"))
+		info["Is locating"] = utils.friendly_bool(self.info.get("isLocating"))
+		info["Device with you"] = utils.friendly_bool(self.info.get("deviceWithYou"))
+		info["Location inaccurate"] = utils.friendly_bool(self.info["location"].get("isInaccurate"))
+		info["Position type"] = self.info["location"].get("positionType", "unknown")
+		info["Latitude"] = str(self.info["location"].get("latitude", 0))
+		info["Longitude"] = str(self.info["location"].get("longitude", 0))
+		info["altitude"] = str(self.info["location"].get("altitude", 0))
+		info["Floor level"] = str(self.info["location"].get("floorLevel", 0))
+		info["Horizontal accuracy"] = str(self.info.get("horizontalAccuracy", 0))
+		info["verticalAccuracy"] = str(self.info.get("verticalAccuracy", 0))
+		ts = self.info["location"].get("timeStamp")
+		if ts:
+			ts /= 1000
+			info["Location updated"] = tformat.format_time(time.time() - ts) + " ago"
+		return info
