@@ -1,5 +1,7 @@
 import time
+import json
 import wx
+import pyperclip
 import tformat
 from pyicloud import *
 from pyicloud import exceptions as pyi_exceptions
@@ -132,6 +134,9 @@ class FindMy(wx.Panel):
 		actions_sizer.Add(self.lost_mode, 0, wx.ALL, 5)
 		self.update = wx.Button(self, label="&Refresh")
 		actions_sizer.Add(self.update, 0, wx.ALL, 5)
+		if app.debug:
+			self.copy = wx.Button(self, label="&Copy to clipboard (debug)")
+			actions_sizer.Add(self.copy, 0, wx.ALL, 5)
 		self.main_sizer.Add(device_sizer)
 		self.main_sizer.Add(actions_sizer)
 		self.SetSizer(self.main_sizer)
@@ -142,6 +147,14 @@ class FindMy(wx.Panel):
 		self.Bind(wx.EVT_BUTTON, self.on_info, self.info)
 		self.Bind(wx.EVT_BUTTON, self.on_refresh, self.update)
 		self.Bind(wx.EVT_BUTTON, self.on_lost_mode, self.lost_mode)
+		if app.debug:
+			self.Bind(wx.EVT_BUTTON, self.on_copy, self.copy)
+
+	def on_copy(self, event):
+		idx = self.device_list.GetSelection()
+		if idx == wx.NOT_FOUND:
+			return
+		pyperclip.copy(json.dumps(icloud.service.devices[idx].data, indent=4))
 
 	def on_refresh(self, event):
 		self._populate_devices(True)
