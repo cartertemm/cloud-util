@@ -17,6 +17,7 @@ class ContactsService(object):
         self._contacts_changeset_url = "%s/changeset" % self._contacts_endpoint
 
         self.response = {}
+        self.order = "first,last"
 
     def refresh_client(self):
         """
@@ -25,7 +26,7 @@ class ContactsService(object):
         """
         params_contacts = dict(self.params)
         params_contacts.update(
-            {"clientVersion": "2.1", "locale": "en_US", "order": "last,first",}
+            {"clientVersion": "2.1", "locale": "en_US", "order": self.order,}
         )
         req = self.session.get(self._contacts_refresh_url, params=params_contacts)
         self.response = req.json()
@@ -42,7 +43,7 @@ class ContactsService(object):
         req = self.session.get(self._contacts_next_url, params=params_next)
         self.response = req.json()
 
-    def all(self):
+    def all(self, ):
         """
         Retrieves all contacts.
         """
