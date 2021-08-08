@@ -101,6 +101,8 @@ class MainFrame(wx.Frame):
 	def make_tabs(self):
 		self.find_my = FindMy(self.tabs)
 		self.tabs.AddPage(self.find_my, "Find my", True)
+		self.contacts = Contacts(self.tabs)
+		self.tabs.AddPage(self.contacts, "Contacts", False)
 
 	def bind_events(self):
 		self.Bind(wx.EVT_CLOSE, self.on_close)
@@ -400,3 +402,71 @@ class DeviceInfoDialog(ChoiceDialog):
 		else:
 			dialogs.warning(self.panel, "Warning", "This device has no associated location information")
 		return info
+
+class Contacts(wx.Panel):
+	def __init__(self, parent, *args, **kwargs):
+		super().__init__(parent, *args, **kwargs)
+		self.init_ui()
+		self.bind_events()
+		self.populate_contacts()
+		self.order_filters = (
+			"first,last",
+			"last,first"
+		)
+		self.order_by.Set(self.order_filters)
+		self.order_by.SetSelection(0)
+
+	def bind_events(self):
+		self.Bind(wx.EVT_BUTTON, self.on_refresh, self.update)
+
+	def init_ui(self):
+		self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+		lst_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		label = wx.StaticText(self, label="Contacts: ")
+		self.contacts_list = wx.ListBox(self)
+		lst_sizer.Add(label, 0, wx.ALL, 5)
+		lst_sizer.Add(self.contacts_list, 0, wx.ALL, 5)
+		order_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		label = wx.StaticText(self, label="Order by: ")
+		self.order_by = wx.Choice(self)
+		order_sizer.Add(label, 0, wx.ALL, 5)
+		order_sizer.Add(self.order_by, 0, wx.ALL, 5)
+		actions_sizer = wx.BoxSizer(wx.VERTICAL)
+		self.update = wx.Button(self, label="&Refresh")
+		actions_sizer.Add(self.update, 0, wx.ALL, 5)
+		self.main_sizer.Add(lst_sizer)
+		self.main_sizer.Add(order_sizer)
+		self.main_sizer.Add(actions_sizer)
+		self.SetSizerAndFit(self.main_sizer)
+		self.Layout()
+
+	def on_refresh(self, event):
+		self.populate_contacts(True)
+
+	def populate_contacts(self, focus_list=False):
+		@utils.run_threaded
+		def inner():
+			contacts_service = icloud.service.contacts
+			idx = self.order_by.GetSelection()
+			if idx != wx.NOT_FOUND:
+				contacts_service.order = self.order_filters[idx]
+			self.contacts = contacts_service.all()
+			items = self._format_contacts()
+			wx.CallAfter(_set_items, items)
+		def _set_items(items):
+			self.contacts_list.Freeze()
+			self.contacts_list.Clear()
+			self.contacts_list.Set(items)
+			self.contacts_list.Thaw()
+			if self.contacts_list.GetCount() > 0:
+				self.contacts_list.SetSelection(0)
+			if focus_list:
+				self.contacts_list.SetFocus()
+		inner()
+
+	def _format_contacts(self):
+		contacts = []
+		for contact in self.contacts:
+			item = " ".join([contact.get("firstName", ""), contact.get("lastName", "")]).strip()
+			contacts.append(item)
+		return contacts
