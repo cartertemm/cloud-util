@@ -320,7 +320,7 @@ class DeviceInfoDialog(ChoiceDialog):
 	def init_ui(self):
 		super().init_ui()
 		actions_sizer = wx.BoxSizer(wx.HORIZONTAL)
-		self.update = wx.Button(self, label="&Update")
+		self.update = wx.Button(self.panel, label="&Update")
 		actions_sizer.Add(self.update, 0, wx.ALL, 5)
 		self.sizer.Add(actions_sizer, 0, wx.ALL, 5)
 
@@ -370,16 +370,20 @@ class DeviceInfoDialog(ChoiceDialog):
 		info["Location capable"] = utils.friendly_bool(self.info.get("locationCapable"))
 		info["Is locating"] = utils.friendly_bool(self.info.get("isLocating"))
 		info["Device with you"] = utils.friendly_bool(self.info.get("deviceWithYou"))
-		info["Location inaccurate"] = utils.friendly_bool(self.info["location"].get("isInaccurate"))
-		info["Position type"] = self.info["location"].get("positionType", "unknown")
-		info["Latitude"] = str(self.info["location"].get("latitude", 0))
-		info["Longitude"] = str(self.info["location"].get("longitude", 0))
-		info["altitude"] = str(self.info["location"].get("altitude", 0))
-		info["Floor level"] = str(self.info["location"].get("floorLevel", 0))
-		info["Horizontal accuracy"] = str(self.info.get("horizontalAccuracy", 0))
-		info["verticalAccuracy"] = str(self.info.get("verticalAccuracy", 0))
-		ts = self.info["location"].get("timeStamp")
-		if ts:
-			ts /= 1000
-			info["Location updated"] = tformat.format_time(time.time() - ts) + " ago"
+		location = self.info.get("location")
+		if location:
+			info["Location inaccurate"] = utils.friendly_bool(location.get("isInaccurate"))
+			info["Position type"] = location.get("positionType", "unknown")
+			info["Latitude"] = str(location.get("latitude", 0))
+			info["Longitude"] = str(location.get("longitude", 0))
+			info["altitude"] = str(location.get("altitude", 0))
+			info["Floor level"] = str(location.get("floorLevel", 0))
+			info["Horizontal accuracy"] = str(location.get("horizontalAccuracy", 0))
+			info["verticalAccuracy"] = str(location.get("verticalAccuracy", 0))
+			ts = location.get("timeStamp")
+			if ts:
+				ts /= 1000
+				info["Location updated"] = tformat.format_time(time.time() - ts) + " ago"
+		else:
+			dialogs.warning(self.panel, "Warning", "This device has no associated location information")
 		return info
