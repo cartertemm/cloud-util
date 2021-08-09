@@ -8,6 +8,7 @@ from pyicloud import exceptions as pyi_exceptions
 import app
 import config
 import dialogs
+import geocoder
 import icloud
 import utils
 
@@ -130,6 +131,8 @@ class FindMy(wx.Panel):
 		actions_sizer = wx.BoxSizer(wx.HORIZONTAL)
 		self.info = wx.Button(self, label="&Info")
 		actions_sizer.Add(self.info, 0, wx.ALL, 5)
+		self.locate = wx.Button(self, label="L&ocate (experimental)")
+		actions_sizer.Add(self.locate, 0, wx.ALL, 5)
 		self.play_sound = wx.Button(self, label="&Play sound")
 		actions_sizer.Add(self.play_sound, 0, wx.ALL, 5)
 		self.lost_mode = wx.Button(self, label="&Lost mode")
@@ -147,6 +150,7 @@ class FindMy(wx.Panel):
 	def bind_events(self):
 		self.Bind(wx.EVT_BUTTON, self.on_play_sound, self.play_sound)
 		self.Bind(wx.EVT_BUTTON, self.on_info, self.info)
+		self.Bind(wx.EVT_BUTTON, self.on_locate, self.locate)
 		self.Bind(wx.EVT_BUTTON, self.on_refresh, self.update)
 		self.Bind(wx.EVT_BUTTON, self.on_lost_mode, self.lost_mode)
 		if app.debug:
@@ -160,6 +164,30 @@ class FindMy(wx.Panel):
 
 	def on_refresh(self, event):
 		self._populate_devices(True)
+
+	def on_locate(self, event):
+		@utils.run_threaded
+		def inner():
+			idx = self.device_list.GetSelection()
+			if idx == wx.NOT_FOUND:
+				return
+			location = icloud.service.devices[idx].get("location")
+			if not location:
+				dialogs.error(self, "Error", "This device has no associated location information")
+				return
+			idx = self.device_list.GetSelection()
+			if idx == wx.NOT_FOUND:
+				return
+			lat = location.get("latitude")
+			lon = location.get("longitude")
+			if not lat or not lon:
+				dialogs.error(self, "Error", "Unable to retrieve device coordinates")
+				return
+			g = geocoder.geocode(lat, lon, addressdetails=0)
+			name = g.get("display_name")
+			elapsed = tformat.format_time(time.time() - location.get("timeStamp")/1000)
+			wx.CallAfter(dialogs.information, self, "Location", "As of "+elapsed+" ago, your device is located at or near "+name+".")
+		inner()
 
 	def _populate_devices(self, focus_list=False):
 		@utils.run_threaded
