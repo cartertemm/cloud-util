@@ -184,9 +184,10 @@ class FindMy(wx.Panel):
 				dialogs.error(self, "Error", "Unable to retrieve device coordinates")
 				return
 			g = geocoder.geocode(lat, lon, addressdetails=0)
+			type = location.get("positionType")
 			name = g.get("display_name")
 			elapsed = tformat.format_time(time.time() - location.get("timeStamp")/1000)
-			wx.CallAfter(dialogs.information, self, "Location", "As of "+elapsed+" ago, your device is located at or near "+name+".")
+			wx.CallAfter(dialogs.information, self, "Location", "As of "+elapsed+" ago, according to "+type+" positioning your device is located at or near "+name+".")
 		inner()
 
 	def _populate_devices(self, focus_list=False):
