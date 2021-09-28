@@ -226,11 +226,13 @@ class FindMy(wx.Panel):
 			"204": "Unregistered",
 		}
 		info = info.status(["batteryStatus"])
+		print(info["name"])
+		print(info.get("deviceDisplayName", "unknown"))
 		return ", ".join((
 			info["name"],
-			info["deviceDisplayName"],
-			str(round(info["batteryLevel"]*100, 3))+"%",
-			info["batteryStatus"],
+			info.get("deviceDisplayName", "unknown"),
+			str(round((info["batteryLevel"] or 0) * 100, 3))+"%",
+			info["batteryStatus"] or "unknown",
 		))
 
 	def on_play_sound(self, event):
