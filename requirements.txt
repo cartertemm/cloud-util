@@ -4,4 +4,4 @@ pyperclip
 requests>=2.20.0
 
 # temporary until we fork pyicloud or something
--r pyicloud/requirements.txt
+-r src/pyicloud/requirements.txt
